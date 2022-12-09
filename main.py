@@ -4,24 +4,34 @@ from math import sqrt, pi, atan
 import time
 
 
-def calculate_side(hsv, image):
-    mask = cv2.inRange(hsv, np.array([0, 0, 197]), np.array([180, 256, 232]))
-    kernel = np.ones((5, 5), np.uint8)
-    erosion = cv2.erode(mask, kernel, iterations=1)
-    cv2.imshow("erosion", erosion)
-    
-    contours, hierarchy = cv2.findContours(erosion.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    
-    print(len(contours))
-    for i in range(len(contours)):
-        x, y, w, h = cv2.boundingRect(contours[i])
-        pole_rect = w * h
-        print(pole_rect)
-        if pole_rect < 500:
-            continue
-#         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
-#         cv2.imshow('win', image)
-#         cv2.waitKey()
+def calculate_side(image):
+    mask = cv2.inRange(image, np.array([79, 99, 83]), np.array([180, 256, 256]))
+    kernel_erosion = np.ones((2, 2), np.uint8)
+    kernel_opening = np.ones((5, 5), np.uint8)
+    erosion = cv2.erode(mask, kernel_erosion, iterations=1)
+    opening = cv2.morphologyEx(erosion, cv2.MORPH_OPEN, kernel_opening)
+    contours, _ = cv2.findContours(opening, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    for count, contour in enumerate(contours):
+        epsilon = 0.1 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)  # Calculate the position of the corners of the contour
+        if len(np.squeeze(approx)) == 4:  # Take only with 4 corners
+            # Positions of the corners
+            x1, y1 = np.squeeze(approx)[0]
+            x2, y2 = np.squeeze(approx)[1]
+            x3, y3 = np.squeeze(approx)[2]
+            x4, y4 = np.squeeze(approx)[3]
+            # Length of each side
+            side1 = sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+            side2 = sqrt((x2 - x3) ** 2 + (y2 - y3) ** 2)
+            side3 = sqrt((x3 - x4) ** 2 + (y3 - y4) ** 2)
+            side4 = sqrt((x4 - x1) ** 2 + (y4 - y1) ** 2)
+            if abs(side1-side2) < 2 and abs(side1-side3) < 2 and abs(side1-side4) < 2 and side1 > 10:
+                print("side", side1)
+                # Draw each contour only for visualisation purposes
+                #cv2.drawContours(image, contours, count, (0, 0, 255), 2)
+                #cv2.imshow("image", image)
+                #cv2.waitKey()
+                return side1
 
 def rotate_table(gray):
     height, width = gray.shape
@@ -37,9 +47,9 @@ def rotate_table(gray):
     
     result = np.where(corners == 1)  
     corners_points = list(zip(result[0], result[1]))  # list of coord corners
-#     cv2.imshow("corners", corners)  # DEBUG
+    cv2.imshow("corners", corners)  # DEBUG
     
-    x, y = corners_points[len(corners_points) // 2]  # could be any point (I take middle one)
+#    x, y = corners_points[len(corners_points) // 2]  # could be any point (I take middle one)
 
 #     correct_length = sqrt((166 - 57) ** 2 + (142 - 184) ** 2)  # calculated to test == 116.8
 #     for pts in corners_points:
@@ -67,11 +77,9 @@ def main():
         
         # Capture frame-by-frame
         ret, frame = cap.read()
-        gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        hsv_img = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        
-        calculate_side(hsv_img, frame)
-#         rotate_table(gray_img)
+        gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)        
+        side = calculate_side(frame)
+#        rotate_table(gray_img)
 
         
         # Display the result of our processing
