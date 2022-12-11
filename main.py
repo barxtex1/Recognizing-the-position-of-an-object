@@ -2,6 +2,11 @@ import cv2
 import numpy as np
 from math import sqrt, pi, atan
 import time
+import threading
+
+
+def display_window(frame):
+    cv2.imshow("Original frame", frame)
 
 
 def calculate_side(image):
@@ -31,14 +36,12 @@ def calculate_side(image):
                 #cv2.drawContours(image, contours, count, (0, 0, 255), 2)
                 #cv2.imshow("image", image)
                 #cv2.waitKey()
-                return side1
+                if side1 is not None:
+                    return side1
 
-def rotate_table(gray):
+
+def rotate_table(gray, side):
     height, width = gray.shape
-#     window_of_mask = 150  # then window shape = (300,300)
-#     mask = gray[height // 2 - window_of_mask:height // 2 + window_of_mask,
-#            width // 2 - window_of_mask:width // 2 + window_of_mask]
-#     height, width = mask.shape
     cX, cY = (height // 2, width // 2)  # center point of frame
 
     harris_corners = cv2.cornerHarris(gray, 4, 3, 0.23)  # detect corners
@@ -49,23 +52,24 @@ def rotate_table(gray):
     corners_points = list(zip(result[0], result[1]))  # list of coord corners
     cv2.imshow("corners", corners)  # DEBUG
     
-#    x, y = corners_points[len(corners_points) // 2]  # could be any point (I take middle one)
+    x, y = corners_points[len(corners_points) // 2]  # could be any point (I take middle one)
 
-#     correct_length = sqrt((166 - 57) ** 2 + (142 - 184) ** 2)  # calculated to test == 116.8
-#     for pts in corners_points:
-#         x0, y0 = pts
-#         length_of_pts_to_corner = sqrt((x - x0) ** 2 + (y - y0) ** 2)
-#         error = abs(correct_length - length_of_pts_to_corner)
-#         if error < 0.4:
-# 
-#             a = (y - y0) / (x - x0)  # slope of a straight line
-#             theta = atan(abs(x - x0) / abs(y - y0))  # angle of rotate (in radians)
-#             if a < 0:
-#                 M = cv2.getRotationMatrix2D((cX, cY), -theta * 180 / pi, 1.0)
-#             else:
-#                 M = cv2.getRotationMatrix2D((cX, cY), theta * 180 / pi, 1.0)
-#             rotated = cv2.warpAffine(mask, M, (width, height))
-#             return rotated
+    # correct_length = sqrt((166 - 57) ** 2 + (142 - 184) ** 2)  # calculated to test == 116.8
+    for pts in corners_points:
+        x0, y0 = pts
+        length_of_pts_to_corner = sqrt((x - x0) ** 2 + (y - y0) ** 2)
+        error = abs(side - length_of_pts_to_corner)
+        if error < 0.4:
+
+            a = (y - y0) / (x - x0)  # slope of a straight line
+            theta = atan(abs(x - x0) / abs(y - y0))  # angle of rotate (in radians)
+            if a < 0:
+                M = cv2.getRotationMatrix2D((cX, cY), -theta * 180 / pi, 1.0)
+            else:
+                M = cv2.getRotationMatrix2D((cX, cY), theta * 180 / pi, 1.0)
+            rotated = cv2.warpAffine(gray, M, (width, height))
+            cv2.imshow("rotated", rotated)  # DEBUG
+            return rotated
 
 
 def main():
@@ -74,12 +78,14 @@ def main():
     key = ord('a')
     while key != ord('q'):
         start_time = time.time()
-        
+
         # Capture frame-by-frame
         ret, frame = cap.read()
-        gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)        
+        threading.Thread(target=display_window(frame), args=(1,)).start()  # DISPLAY
+
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         side = calculate_side(frame)
-#        rotate_table(gray_img)
+        rotated_frame = rotate_table(gray_frame, side)
 
         
         # Display the result of our processing
@@ -99,4 +105,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
