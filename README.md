@@ -27,7 +27,6 @@ Everything is implemented using a raspberry pi 4B and an OdSeven HD OV5647 5Mpx 
 
 
 ### Libraries
-Interpreter testujący projekty będzie miał zainstalowane biblioteki:
 - [OpenCV](https://docs.opencv.org/master/)
 - [NumPy](https://numpy.org/)
 
