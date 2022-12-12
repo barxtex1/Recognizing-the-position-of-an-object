@@ -1,4 +1,5 @@
 # Recognizing the position of an object, in a two-dimensional system, taking into account the orientation
+## Author Bartosz Popielarczyk
 
 The goal of the project is to determine in real time the position in which the vehicle is located based on a reading from a camera placed in the chassis of the mobile object. The transporter moves along an MxN binary image modified for orientation recognition. The position relative to the whole image is decoded based on reading a binary value depending on a kernel matrix (could be 3x3, 4x4 or 5x5).
 
