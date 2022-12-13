@@ -3,6 +3,7 @@ import numpy as np
 from math import sqrt, pi, atan
 import time
 import threading
+import click
 
 
 def display_window(frame):
@@ -73,7 +74,7 @@ def rotate_table(gray, side):
                 pass  # For while
 
 
-def cut_out_square(img, side):
+def cut_out_square(img, side, kernel_size):
     height, width = img.shape
     harris_corners = cv2.cornerHarris(img, 7, 1, 0.21)  # detect corners
     corners = np.zeros_like(harris_corners)
@@ -83,10 +84,10 @@ def cut_out_square(img, side):
     corners_points = list(zip(result[0], result[1]))  # list of coord corners
     cv2.imshow("corners", corners)  # DEBUG
     for x, y in corners_points:
-        if 0.15*height < x < 0.85*height and 0.15*width < y < 0.85*width:
+        if 0.15 * height < x < 0.85 * height and 0.15 * width < y < 0.85 * width:
             print("height, width:", height, width)
             print("coord of pick corner:", x, y)
-            return img[x:x + int(3 * side), y:y + int(3 * side)]
+            return img[x:x + int(kernel_size * side), y:y + int(kernel_size * side)]
 
     # diagonal_length = sqrt((33 - 215) ** 2 + (55 - 236) ** 2)  # calculated to test
     # diagonal_length = 3 * side * sqrt(2)
@@ -106,14 +107,16 @@ def cut_out_square(img, side):
     #                 return img[x:x + int(3 * side), y:y + int(3 * side)]
 
 
-def main():
+@click.command(no_args_is_help=True)
+@click.option('-k', '--kernel', type=int, help='Size of kernel')
+def main(kernel):
     cap = cv2.VideoCapture(0)  # open the default camera
     # frame = cv2.imread("resources/image-night.jpg")
 
     key = ord('a')
     while key != ord('q'):
         start_time = time.time()
-
+        print(kernel)
         # Capture frame-by-frame
         ret, frame = cap.read()
         threading.Thread(target=display_window(frame), args=(1,)).start()  # DISPLAY
@@ -123,7 +126,7 @@ def main():
         if side is not None:  # Check if program calculate side of pixel
             rotated_frame = rotate_table(gray_frame, side)
             if rotated_frame is not None:
-                square = cut_out_square(rotated_frame, side)
+                square = cut_out_square(rotated_frame, side, kernel)
                 if square is not None:
                     cv2.imshow("Cut out square", square)
                     print("CUT OUT SIDE:", side)
