@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from math import sqrt, pi, atan
+from scipy.spatial.distance import cdist
 import time
 import threading
 import click
@@ -32,7 +33,7 @@ def calculate_side(image):
             side3 = sqrt((x3 - x4) ** 2 + (y3 - y4) ** 2)
             side4 = sqrt((x4 - x1) ** 2 + (y4 - y1) ** 2)
             if abs(side1 - side2) < 2 and abs(side1 - side3) < 2 and abs(side1 - side4) < 2 and side1 > 10:
-                print("side", side1)
+                # print("side", side1)
                 # Draw each contour only for visualisation purposes
                 # cv2.drawContours(image, contours, count, (0, 0, 255), 2)
                 # cv2.imshow("image", image)
@@ -68,90 +69,110 @@ def rotate_table(gray, side):
                 else:
                     M = cv2.getRotationMatrix2D((cX, cY), theta * 180 / pi, 1.0)
                 rotated = cv2.warpAffine(gray, M, (width, height))
-                cv2.imshow("rotated", rotated)  # DEBUG
+                # cv2.imshow("rotated", rotated)  # DEBUG
                 return rotated
             except:
                 pass  # For while
 
 
 def cut_out_square(img, side, kernel_size):
+    # FIRST METHOD
+    # height, width = img.shape
+    # harris_corners = cv2.cornerHarris(img, 7, 1, 0.21)  # detect corners
+    # corners = np.zeros_like(harris_corners)
+    # corners[harris_corners > 0.025 * harris_corners.max()] = 1
+    #
+    # result = np.where(corners == 1)
+    # corners_points = list(zip(result[0], result[1]))  # list of coord corners
+    # # cv2.imshow("corners", corners)  # DEBUG
+    # for x, y in corners_points:
+    #     if 0.15 * height < x < 0.85 * height and 0.15 * width < y < 0.85 * width:
+    #         return img[x:x + int(kernel_size * side), y:y + int(kernel_size * side)]
+
+    # SECOND METHOD
     height, width = img.shape
-    harris_corners = cv2.cornerHarris(img, 7, 1, 0.21)  # detect corners
+    center_square = img[height // 2 - int(0.5 * kernel_size * side):height // 2 + int(0.5 * kernel_size * side),
+                    width // 2 - int(0.5 * kernel_size * side):width // 2 + int(0.5 * kernel_size * side)]
+    h_center_square, w_center_square = center_square.shape
+    harris_corners = cv2.cornerHarris(center_square, 7, 1, 0.21)  # detect corners
     corners = np.zeros_like(harris_corners)
     corners[harris_corners > 0.025 * harris_corners.max()] = 1
 
     result = np.where(corners == 1)
     corners_points = list(zip(result[0], result[1]))  # list of coord corners
-    cv2.imshow("corners", corners)  # DEBUG
-    for x, y in corners_points:
-        if 0.15 * height < x < 0.85 * height and 0.15 * width < y < 0.85 * width:
-            print("height, width:", height, width)
-            print("coord of pick corner:", x, y)
-            return img[x:x + int(kernel_size * side), y:y + int(kernel_size * side)]
+    corners_points = np.array(corners_points)  # convert list to numpy array
+    distance = cdist(np.array([[0, 0]]), corners_points)
+    idx = np.argmin(distance)
+    min_distance = np.min(distance)
 
-    # diagonal_length = sqrt((33 - 215) ** 2 + (55 - 236) ** 2)  # calculated to test
-    # diagonal_length = 3 * side * sqrt(2)
-    # for pts1 in corners_points:
-    #     x, y = pts1
-    #     for pts2 in corners_points:
-    #         x0, y0 = pts2
-    #         length_of_pts1_to_pts2 = sqrt((x - x0) ** 2 + (y - y0) ** 2)
-    #         error = abs(diagonal_length - length_of_pts1_to_pts2)
-    #         if error < 0.4:
-    #             cv2.line(img, (y, x), (y0, x0), (0, 0, 255), 2)  # ADD to test
-    #             if y > 150:
-    #                 # plot_cut_out_square(img, x, y) # ADD to test
-    #                 return img[x:x + int(3 * side), y - int(3 * side):y]
-    #             else:
-    #                 # plot_cut_out_square(img, x, y) # ADD to test
-    #                 return img[x:x + int(3 * side), y:y + int(3 * side)]
+    for x in np.array([[[0, w_center_square]], [[h_center_square, 0]], [[h_center_square, w_center_square]]]):
+        distance = cdist(x, corners_points)
+        if min_distance > np.min(distance):
+            min_distance = np.min(distance)
+            idx = np.argmin(distance)
+
+    h_min_d_square, w_min_d_square = corners_points[idx]  # Coordinate of the min. corner distance between one of the 4 corners of the window
+    x_img, y_img = height // 2 - int(0.5 * kernel_size * side), width // 2 - int(0.5 * kernel_size * side)
+    h_min_d, w_min_d = x_img + h_min_d_square, y_img + w_min_d_square
+    if h_min_d_square < h_center_square // 2 and w_min_d_square < w_center_square // 2:
+        square_ = img[h_min_d: h_min_d + int(kernel_size * side), w_min_d: w_min_d + int(kernel_size * side)]
+    elif h_min_d_square < h_center_square // 2 and w_min_d_square > w_center_square // 2:
+        square_ = img[h_min_d: h_min_d + int(kernel_size*side), w_min_d - int(kernel_size*side): w_min_d]
+    elif h_min_d_square > h_center_square // 2 and w_min_d_square < w_center_square // 2:
+        square_ = img[h_min_d - int(kernel_size * side): h_min_d, w_min_d + int(kernel_size * side): w_min_d]
+    else:
+        square_ = img[h_min_d - int(kernel_size * side): h_min_d, w_min_d - int(kernel_size * side): w_min_d]
+
+    # cv2.imshow("square_2", square_)  # DEBUG
+    # cv2.imshow("corners", corners)
+    return square_
 
 
-@click.command(no_args_is_help=True)
-@click.option('-k', '--kernel', type=int, help='Size of kernel')
+# @click.command(no_args_is_help=True)
+# @click.option('-k', '--kernel', type=int, help='Size of kernel')
 def main(kernel):
-    cap = cv2.VideoCapture(0)  # open the default camera
-    # frame = cv2.imread("resources/image-night.jpg")
-
+    # cap = cv2.VideoCapture(0)  # open the default camera
+    frame = cv2.imread("resources/image-night.jpg")
     key = ord('a')
     while key != ord('q'):
-        start_time = time.time()
-        print(kernel)
+        # start_time = time.time()
+        # print(kernel)
         # Capture frame-by-frame
-        ret, frame = cap.read()
-        threading.Thread(target=display_window(frame), args=(1,)).start()  # DISPLAY
+        # ret, frame = cap.read()
+        # threading.Thread(target=display_window(frame), args=(1,)).start()  # DISPLAY
 
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         side = calculate_side(frame)
         if side is not None:  # Check if program calculate side of pixel
             rotated_frame = rotate_table(gray_frame, side)
+            cv2.imshow("rotated", rotated_frame)
             if rotated_frame is not None:
                 square = cut_out_square(rotated_frame, side, kernel)
                 if square is not None:
                     cv2.imshow("Cut out square", square)
-                    print("CUT OUT SIDE:", side)
-                    print("---------------------------------------------------------------------------------------")
+                    # print("CUT OUT SIDE:", side)
+                    # print("---------------------------------------------------------------------------------------")
                 else:
                     pass
-                    print("[-] Warning: square missing")
+                    # print("[-] Warning: square missing")
             else:
                 pass
-                print("[-] Warning: rotated frame = None (probably error > 0.4 for each point)")
+                # print("[-] Warning: rotated frame = None (probably error > 0.4 for each point)")
         else:
             pass
-            print("[-] Warning: Side = None")
+            # print("[-] Warning: Side = None")
         # Display the result of our processing
         #         cv2.imshow('gray_img', gray_img)
-        print((time.time() - start_time) * 1000, "miliseconds")  # use for process debugging
+        # print((time.time() - start_time) * 1000, "miliseconds")  # use for process debugging
 
         # Wait a little (5 ms) for a key press - this is required to refresh the image in our window
         key = cv2.waitKey(5)
 
     # When everything done, release the capture
-    cap.release()
+    # cap.release()
     # and destroy created windows, so that they are not left for the rest of the program
     cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
-    main()
+    main(3)
