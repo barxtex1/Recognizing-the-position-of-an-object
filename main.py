@@ -119,7 +119,7 @@ def cut_out_square(img, side, kernel_size):
     elif h_min_d_square < h_center_square // 2 and w_min_d_square > w_center_square // 2:
         square_ = img[h_min_d: h_min_d + int(kernel_size*side), w_min_d - int(kernel_size*side): w_min_d]
     elif h_min_d_square > h_center_square // 2 and w_min_d_square < w_center_square // 2:
-        square_ = img[h_min_d - int(kernel_size * side): h_min_d, w_min_d + int(kernel_size * side): w_min_d]
+        square_ = img[h_min_d - int(kernel_size * side): h_min_d, w_min_d: w_min_d + int(kernel_size*side)]
     else:
         square_ = img[h_min_d - int(kernel_size * side): h_min_d, w_min_d - int(kernel_size * side): w_min_d]
 
@@ -132,7 +132,7 @@ def cut_out_square(img, side, kernel_size):
 # @click.option('-k', '--kernel', type=int, help='Size of kernel')
 def main(kernel):
     # cap = cv2.VideoCapture(0)  # open the default camera
-    frame = cv2.imread("resources/image-night.jpg")
+    frame = cv2.imread("resources/image-morning.jpg")
     key = ord('a')
     while key != ord('q'):
         # start_time = time.time()
