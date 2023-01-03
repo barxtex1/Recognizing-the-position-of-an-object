@@ -128,14 +128,43 @@ def cut_out_square(img, side, kernel_size):
     return square_
 
 
+def find_mask_of_triangle(hsv):
+    mask = cv2.inRange(hsv, np.array([0, 0, 67]), np.array([180, 256, 123]))
+    kernelOpen = np.ones((6, 6))
+    maskOpen = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernelOpen)
+    return maskOpen
+
+
+def find_orientation(triangle):
+    contours, _ = cv2.findContours(triangle, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    for contour in contours:
+        epsilon = 0.15 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)  # Calculate the position of the corners of the contour
+        # print(len(np.squeeze(approx)))
+        if len(np.squeeze(approx)) == 3:  # Take only with 3 corners (triangle)
+            # find orientation
+            coord_of_corners = np.squeeze(approx)
+            w_1, h_1 = coord_of_corners[0]
+            w_2, h_2 = coord_of_corners[1]
+            # w_3, h_3 = coord_of_corners[2]
+            if w_2 > w_1 and h_2 > h_1:
+                return "down"
+            elif h_2 > h_1:
+                return "up"
+            elif w_2 < w_1 and h_2 < h_1:
+                return "right"
+            else:
+                return "left"
+
+
 # @click.command(no_args_is_help=True)
 # @click.option('-k', '--kernel', type=int, help='Size of kernel')
 def main(kernel):
     # cap = cv2.VideoCapture(0)  # open the default camera
-    frame = cv2.imread("resources/image-morning.jpg")
+    frame = cv2.imread("resources/image-night.jpg")
     key = ord('a')
     while key != ord('q'):
-        # start_time = time.time()
+        start_time = time.time()
         # print(kernel)
         # Capture frame-by-frame
         # ret, frame = cap.read()
@@ -145,11 +174,17 @@ def main(kernel):
         side = calculate_side(frame)
         if side is not None:  # Check if program calculate side of pixel
             rotated_frame = rotate_table(gray_frame, side)
-            cv2.imshow("rotated", rotated_frame)
+            # cv2.imshow("rotated", rotated_frame)
             if rotated_frame is not None:
                 square = cut_out_square(rotated_frame, side, kernel)
                 if square is not None:
                     cv2.imshow("Cut out square", square)
+                    bgr_square = cv2.cvtColor(square, cv2.COLOR_GRAY2BGR)
+                    hsv_square = cv2.cvtColor(bgr_square, cv2.COLOR_BGR2HSV)
+                    triangle = find_mask_of_triangle(hsv_square)
+                    cv2.imshow("triangle", triangle)
+                    orientation = find_orientation(triangle)
+                    print("Current Orientation: ", orientation)
                     # print("CUT OUT SIDE:", side)
                     # print("---------------------------------------------------------------------------------------")
                 else:
