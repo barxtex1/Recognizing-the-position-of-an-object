@@ -3,6 +3,7 @@ import numpy as np
 from math import sqrt, pi, atan
 from scipy.spatial.distance import cdist
 import time
+from binary_orientation import binary_orientation
 import threading
 import click
 
@@ -144,17 +145,19 @@ def find_orientation(triangle):
         if len(np.squeeze(approx)) == 3:  # Take only with 3 corners (triangle)
             # find orientation
             coord_of_corners = np.squeeze(approx)
+            print(coord_of_corners)
             w_1, h_1 = coord_of_corners[0]
             w_2, h_2 = coord_of_corners[1]
-            # w_3, h_3 = coord_of_corners[2]
-            if w_2 > w_1 and h_2 > h_1:
-                return "down"
-            elif h_2 > h_1:
+            error_w = abs(w_2 - w_1)
+            error_h = abs(h_2 - h_1)
+            if w_2 > w_1 and error_w > 3:
                 return "up"
-            elif w_2 < w_1 and h_2 < h_1:
+            elif w_2 < w_1 and error_h > 3:
                 return "right"
-            else:
+            elif w_2 < w_1 and error_h < 3:
                 return "left"
+            else:
+                return "down"
 
 
 # @click.command(no_args_is_help=True)
@@ -178,6 +181,7 @@ def main(kernel):
             if rotated_frame is not None:
                 square = cut_out_square(rotated_frame, side, kernel)
                 if square is not None:
+                    square = cv2.imread("square2.png", cv2.IMREAD_GRAYSCALE)  # DEBUG
                     cv2.imshow("Cut out square", square)
                     bgr_square = cv2.cvtColor(square, cv2.COLOR_GRAY2BGR)
                     hsv_square = cv2.cvtColor(bgr_square, cv2.COLOR_BGR2HSV)
@@ -185,6 +189,8 @@ def main(kernel):
                     cv2.imshow("triangle", triangle)
                     orientation = find_orientation(triangle)
                     print("Current Orientation: ", orientation)
+                    position = binary_orientation(hsv_square, orientation, kernel, square)
+                    print(position)
                     # print("CUT OUT SIDE:", side)
                     # print("---------------------------------------------------------------------------------------")
                 else:
