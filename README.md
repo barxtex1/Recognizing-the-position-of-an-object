@@ -19,7 +19,7 @@ The binary image along which the vehicle will move is not a set of random values
 - [x] Calculation of the pixel square side size depending on the camera position
 - [x] Possibility to change the kernel
 - [x] Calculation of the binary value compatible with the rotation
-- [ ] Decoding a binary mask into the position of a point in space
+- [x] Decoding a binary mask into the position of a point in space
 - [ ] Visualization the position relative to the whole binary image
 
 
