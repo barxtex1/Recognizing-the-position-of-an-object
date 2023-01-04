@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import json
 from math import sqrt, pi, atan
 from scipy.spatial.distance import cdist
 import time
@@ -163,6 +164,9 @@ def find_orientation(triangle):
 # @click.command(no_args_is_help=True)
 # @click.option('-k', '--kernel', type=int, help='Size of kernel')
 def main(kernel):
+    file = open('resources/positions_10_10.json')
+    positions = json.load(file)
+    file.close()
     # cap = cv2.VideoCapture(0)  # open the default camera
     frame = cv2.imread("resources/image-night.jpg")
     key = ord('a')
