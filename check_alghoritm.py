@@ -1,7 +1,9 @@
 import numpy as np
 import json
 
-table = np.load('resources/matrix_10_10.npy')
+table = np.load('resources/matrix_150_150.npy')
+board_len = 30
+table = table[:board_len-1, :board_len-1]
 height, width = table.shape
 kernel = 3
 possible_position = {}
@@ -12,7 +14,7 @@ for h in range(height - kernel + 1):
         for line in mask:
             for i in line:
                 binary_number += str(i)
-        possible_position[str(h)+","+str(w)] = int(binary_number, 2)
+        possible_position[int(binary_number, 2)] = str(h)+","+str(w)
         # print("binary:", binary_number, "decimal: ", int(binary_number, base=2))
 
 print("Count of possible position: ", len(possible_position))
@@ -27,7 +29,7 @@ else:
     # create json object from dictionary
     json = json.dumps(possible_position)
     # open file for writing, "w"
-    f = open("resources/positions_10_10.json", "w")
+    f = open("resources/positions_30_30.json", "w")
     # write json object to file
     f.write(json)
     # close file

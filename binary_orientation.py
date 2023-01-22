@@ -54,11 +54,12 @@ def find_where_is_one(coord, number, orientation, shape, kernel):
         return number
 
 
-def binary_orientation(hsv, orientation, kernel, image):
-    mask = cv2.inRange(hsv, np.array([0, 0, 142]), np.array([180, 256, 256]))
-    kernel_erosion = np.ones((10, 10))
+def binary_orientation(hsv, orientation, kernel, thresh):
+
+    mask = cv2.inRange(hsv, np.array(thresh[0]), np.array(thresh[1]))
+    kernel_erosion = np.ones((5, 5))
     erosion = cv2.erode(mask, kernel_erosion, iterations=1)
-    cv2.imshow("dilation", erosion)
+    # cv2.imshow("erosion", erosion)
     binary_value = np.zeros(kernel ** 2)
     coord_numbers = []
     contours, _ = cv2.findContours(erosion, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
