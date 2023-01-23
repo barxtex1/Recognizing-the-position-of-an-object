@@ -28,7 +28,7 @@ def calculate_side(image, thresh, help):
     opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_opening)
     # cv2.imshow("opening", opening)
 
-    edge_length = 6
+    edge_length = 8  # DEBUG
 
     # FIRST METHOD
     # contours, hierarchy = cv2.findContours(opening, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
@@ -149,6 +149,7 @@ def cut_out_square(img, side, kernel_size):
 
     # SECOND METHOD
     gray_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray_frame = np.float32(gray_frame)
     height, width = gray_frame.shape
     center_square = gray_frame[height // 2 - int(0.5 * kernel_size * side):height // 2 + int(0.5 * kernel_size * side),
                     width // 2 - int(0.5 * kernel_size * side):width // 2 + int(0.5 * kernel_size * side)]
@@ -158,13 +159,32 @@ def cut_out_square(img, side, kernel_size):
 
     center_square = cv2.medianBlur(center_square, 5)
     harris_corners = cv2.cornerHarris(center_square, 5, 1, 0.06)  # detect corners
+    # --------------------------------------------------------
+
+    dst = cv2.dilate(harris_corners, None)
+    ret, dst = cv2.threshold(dst, 0.025 * dst.max(), 255, cv2.THRESH_BINARY)
+
+    dst = np.uint8(dst)
+    # find centroids
+    ret, labels, stats, centroids = cv2.connectedComponentsWithStats(dst)
+    # define the criteria to stop and refine the corners
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.001)
+    corners2 = cv2.cornerSubPix(center_square, np.float32(centroids), (20, 20), (-1, -1), criteria)
+    # Now draw them
+    corners_sub = np.zeros_like(center_square)
+    for w, h in corners2:
+        corners_sub[int(h), int(w)] = 1
+    # cv2.imshow("cornes_square_sub", corners_sub)
+
+    # --------------------------------------------------------
+    # WITHOUT SUBPIX
     corners = np.zeros_like(harris_corners)
     corners[harris_corners > 0.025 * harris_corners.max()] = 1
 
     # cv2.imshow("cornes_square", corners)
     # cv2.waitKey()
 
-    result = np.where(corners == 1)
+    result = np.where(corners_sub == 1)
     corners_points = list(zip(result[0], result[1]))  # list of coord corners
     corners_points = np.array(corners_points)  # convert list to numpy array
     distance = cdist(np.array([[0, 0]]), corners_points)
