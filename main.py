@@ -6,6 +6,8 @@ from scipy.spatial.distance import cdist
 import time
 from binary_orientation import binary_orientation
 import threading
+import socket
+import pickle
 import click
 
 
@@ -15,20 +17,35 @@ def display_position(table, kernel, position):
     table_size = table.shape[0]
     side_square_size = table_size // board_len
     cv2.rectangle(table, (width * side_square_size, height * side_square_size),
-                  (width * side_square_size + kernel * side_square_size, height * side_square_size + kernel * side_square_size),
+                  (width * side_square_size + kernel * side_square_size,
+                   height * side_square_size + kernel * side_square_size),
                   (0, 0, 255), 3)
     cv2.imshow("Position visualization", table)
+    # cv2.imwrite("visualization.png", table)
 
 
-def calculate_side(image, thresh, help):
-    hsv_square = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv_square, np.array(thresh[0]), np.array(thresh[1]))
-    # cv2.imshow("mask", mask)
-    kernel_opening = np.ones((5, 5), np.uint8)
-    opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_opening)
+def calculate_side(image, thresh, kernel, help):
+    # hsv_square = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    # hsv_square = cv2.medianBlur(hsv_square, 5)
+    # mask = cv2.inRange(hsv_square, np.array(thresh[0]), np.array(thresh[1]))
+    # kernel_opening = np.ones((5, 5), np.uint8)
+    # opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_opening)
     # cv2.imshow("opening", opening)
 
-    edge_length = 8  # DEBUG
+    # SIMPLE THRESHOLD
+    # gray_frame = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # img = cv2.medianBlur(gray_frame, 5)
+    # ret, mask = cv2.threshold(img, 152, 255, cv2.THRESH_BINARY)
+    # cv2.imshow("opening", mask)
+    # cv2.waitKey()
+
+    # ADAPTIVE
+    gray_frame = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    mask = cv2.adaptiveThreshold(gray_frame, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 73, 0)
+    kernel_erosion = np.ones((3, 3), np.uint8)
+    erosion = cv2.erode(mask, kernel_erosion, iterations=1)
+
+    edge_length = kernel * 3  # DEBUG
 
     # FIRST METHOD
     # contours, hierarchy = cv2.findContours(opening, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
@@ -55,6 +72,45 @@ def calculate_side(image, thresh, help):
     #             return side1 + edge_length
 
     # SECOND METHOD - wymagało użycia approxPolyDp bo nie było tylko 4 punktów
+    contours, hierarchy = cv2.findContours(erosion, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    for count, contour in enumerate(contours):
+        epsilon = 0.1 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)  # Calculate the position of the corners of the contour
+        if len(np.squeeze(approx)) == 4:  # Take only with 4 corners
+            # Positions of the corners
+            x1, y1 = np.squeeze(approx)[0]
+            x2, y2 = np.squeeze(approx)[1]
+            x3, y3 = np.squeeze(approx)[2]
+            x4, y4 = np.squeeze(approx)[3]
+            # Length of each side
+            side1 = sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+            side2 = sqrt((x2 - x3) ** 2 + (y2 - y3) ** 2)
+            side3 = sqrt((x3 - x4) ** 2 + (y3 - y4) ** 2)
+            side4 = sqrt((x4 - x1) ** 2 + (y4 - y1) ** 2)
+            if abs(side1 - side2) < 2 and abs(side1 - side3) < 2 and abs(side1 - side4) < 2 and side1 > 20:
+                # print("side", side1)
+                # Draw each contour only for visualisation purposes
+                # cv2.drawContours(help, contours, count, (0, 0, 255), 2)
+                # cv2.imshow("side", help)
+                # cv2.waitKey()
+                return side1 + edge_length
+
+
+def rotate_table(image, cos, thresh):
+    # FIRST METHOD
+    width, height, _ = image.shape
+    cX, cY = (height // 2, width // 2)  # center point of frame
+
+    hsv_square = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hsv_square = cv2.medianBlur(hsv_square, 5)
+    mask = cv2.inRange(hsv_square, np.array(thresh[0]), np.array(thresh[1]))
+    kernel_opening = np.ones((5, 5), np.uint8)
+    opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_opening)
+
+    # gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # img = cv2.medianBlur(gray_frame, 5)
+    # ret, mask = cv2.threshold(img, 152, 255, cv2.THRESH_BINARY)
+    # cv2.imwrite("check/thresh_" + str(cos) + ".png", mask)
     contours, hierarchy = cv2.findContours(opening, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     for count, contour in enumerate(contours):
         epsilon = 0.1 * cv2.arcLength(contour, True)
@@ -71,23 +127,12 @@ def calculate_side(image, thresh, help):
             side3 = sqrt((x3 - x4) ** 2 + (y3 - y4) ** 2)
             side4 = sqrt((x4 - x1) ** 2 + (y4 - y1) ** 2)
             if abs(side1 - side2) < 2 and abs(side1 - side3) < 2 and abs(side1 - side4) < 2 and side1 > 20:
-                print("side", side1)
-                # Draw each contour only for visualisation purposes
-                # cv2.drawContours(help, contours, count, (0, 0, 255), 2)
-                # cv2.imshow("side", help)
-                # cv2.waitKey()
-                return side1 + edge_length, contour
-
-
-def rotate_table(contour, frame):
-    # FIRST METHOD
-    width, height, _ = frame.shape
-    cX, cY = (height // 2, width // 2)  # center point of frame
-    rect = cv2.minAreaRect(contour)
-    angle = rect[2]
-    M = cv2.getRotationMatrix2D((cX, cY), angle, 1.0)
-    rotated = cv2.warpAffine(frame, M, (height, width))
-    return rotated
+                rect = cv2.minAreaRect(contour)
+                angle = rect[2]
+                M = cv2.getRotationMatrix2D((cX, cY), angle, 1.0)
+                rotated = cv2.warpAffine(image, M, (height, width))
+                return rotated, opening
+    return None, opening
 
     # SECOND METHOD
     # width, height, _ = frame.shape
@@ -153,9 +198,8 @@ def cut_out_square(img, side, kernel_size):
     height, width = gray_frame.shape
     center_square = gray_frame[height // 2 - int(0.5 * kernel_size * side):height // 2 + int(0.5 * kernel_size * side),
                     width // 2 - int(0.5 * kernel_size * side):width // 2 + int(0.5 * kernel_size * side)]
-    h_center_square, w_center_square = center_square.shape
 
-    # cv2.imwrite("center_square.png", center_square)
+    h_center_square, w_center_square = center_square.shape
 
     center_square = cv2.medianBlur(center_square, 5)
     harris_corners = cv2.cornerHarris(center_square, 5, 1, 0.06)  # detect corners
@@ -178,8 +222,8 @@ def cut_out_square(img, side, kernel_size):
 
     # --------------------------------------------------------
     # WITHOUT SUBPIX
-    corners = np.zeros_like(harris_corners)
-    corners[harris_corners > 0.025 * harris_corners.max()] = 1
+    # corners = np.zeros_like(harris_corners)
+    # corners[harris_corners > 0.025 * harris_corners.max()] = 1
 
     # cv2.imshow("cornes_square", corners)
     # cv2.waitKey()
@@ -249,60 +293,90 @@ def find_orientation(triangle):
 # @click.command(no_args_is_help=True)
 # @click.option('-k', '--kernel', type=int, help='Size of kernel')
 def main(kernel):
+    # Upload the required files
     positions = json.loads(open("resources/positions_30_30.json").read())
     table = cv2.imread("resources/table_30_30.png")
     h, w, _ = table.shape
     table = cv2.resize(table, (w // 4, h // 4), interpolation=cv2.INTER_AREA)
-
     thresholds = json.loads(open("threshold_arrays.json").read())
 
-    # cap = cv2.VideoCapture(0)  # open the default camera
-    # if not cap.isOpened():
-    #     print("Cannot open camera")
-    #     exit()
+    # STREAM CONFIGURATION
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10000000)
+    serverip = "192.168.125.58"
+    serverport = 8000
 
+    cap = cv2.VideoCapture(0)  # open the default camera
+    if not cap.isOpened():
+        print("Cannot open camera")
+        exit()
+
+    fps_return = cap.set(cv2.CAP_PROP_FPS, 60)  # Set frame rate to 30
+    print("Camera fps status", fps_return)
+
+    if_side = False
+    pos = False
+    position = None
+    side = None
     key = ord('a')
     avg_time = []
+    cos = 0
     while key != ord('q'):
+        cos += 1  # DEBUG
         start_time = time.time()
         # Capture frame-by-frame
-        # ret, frame = cap.read()
-        frame = cv2.imread("image.png")
-        cv2.imshow("frame", frame)
-
-        side, contour = calculate_side(frame, thresholds["side"], frame)
-        # side = 82  30_30
+        ret, frame = cap.read()
+        if not ret:
+            print("Can't receive frame (stream end?). Exiting ...")
+            break
+        # frame = cv2.imread("frame.png")
+        # cv2.imshow("frame", frame)
+        # cv2.imwrite("check/frame_" + str(cos) + ".png", frame)
+        # cv2.imwrite("frame_git.png", frame)
+        if not if_side:
+            side = calculate_side(frame, thresholds["side"], kernel, frame)
 
         if side is not None:  # Check if program calculate side of pixel
-            rotated_frame = rotate_table(contour, frame)
-            if rotated_frame is not None:
-                # cv2.imshow("rotated", rotated_frame)
-                # cv2.waitKey()
-                square = cut_out_square(rotated_frame, side, kernel)
-                if square is not None:
-                    # square = cv2.imread("square.png", cv2.IMREAD_GRAYSCALE)  # DEBUG
-                    cv2.imshow("Cut out square", square)
-                    hsv_square = cv2.cvtColor(square, cv2.COLOR_BGR2HSV)
-
-                    # cv2.waitKey()
-                    # cv2.imwrite("square.png", square)
-                    #             bgr_square = cv2.cvtColor(square, cv2.COLOR_GRAY2BGR)
-                    #             hsv_square = cv2.cvtColor(bgr_square, cv2.COLOR_BGR2HSV)
-                    #             cv2.imwrite("triangle.png", hsv_square)
-                    triangle = find_mask_of_triangle(hsv_square, thresholds["triangle"])
-                    # cv2.imshow("triangle", triangle)
-                    # cv2.waitKey()
-        #
-                    orientation = find_orientation(triangle)
-                    print("Current Orientation: ", orientation)
-                    position_value = binary_orientation(hsv_square, orientation, kernel, thresholds["side"])
-                    print("position value:", position_value)
-                    try:
-                        position = eval(positions[str(position_value)])
-                        print(position)
-                        threading.Thread(target=display_position(table, kernel, position), args=(1,)).start()  # DISPLAY
-                    except:
-                        pass
+            rotated_frame, photo = rotate_table(frame, cos, thresholds["side"])
+            ret, buffer = cv2.imencode(".jpg", photo, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+            x_as_bytes = pickle.dumps(buffer)
+            s.sendto(x_as_bytes, (serverip, serverport))
+            # if rotated_frame is not None:
+            #     # cv2.imshow("rotated", rotated_frame)
+            #     square = cut_out_square(rotated_frame, side, kernel)
+            #     if square is not None:
+            #         # square = cv2.imread("square.png", cv2.IMREAD_GRAYSCALE)  # DEBUG
+            #         # cv2.imshow("Cut out square", square)
+            #
+            #         hsv_square = cv2.cvtColor(square, cv2.COLOR_BGR2HSV)
+            #
+            #         # cv2.waitKey()
+            #         # cv2.imwrite("square.png", square)
+            #         #             bgr_square = cv2.cvtColor(square, cv2.COLOR_GRAY2BGR)
+            #         #             hsv_square = cv2.cvtColor(bgr_square, cv2.COLOR_BGR2HSV)
+            #         #             cv2.imwrite("triangle.png", hsv_square)
+            #         triangle = find_mask_of_triangle(hsv_square, thresholds["triangle"])
+            #         # cv2.imshow("triangle", triangle)
+            #         # cv2.waitKey()
+            #         #
+            #         orientation = find_orientation(triangle)
+            #         # print("Current Orientation: ", orientation)
+            #         position_value = binary_orientation(square, orientation, kernel, thresholds["side"])
+            #         # print("position value:", position_value)
+            #         try:
+            #             if pos:
+            #                 dis = cdist(np.array([position]), np.array([eval(positions[str(position_value)])]))
+            #                 print("position value", position_value)
+            #                 if dis[0][0] <= 2:
+            #                     position = eval(positions[str(position_value)])
+            #             else:
+            #                 position = eval(positions[str(position_value)])
+            #                 pos = True
+            #                 if_side = True
+            #                 print(position, position_value)
+            #             threading.Thread(target=display_position(table, kernel, position), args=(1,)).start()  # DISPLAY
+            #         except:
+            #             print("Wrong position")
         #         else:
         #             pass
         #             # print("[-] Warning: square missing")
@@ -320,7 +394,7 @@ def main(kernel):
 
     print("average time:", sum(avg_time) / len(avg_time), "miliseconds")
     # When everything done, release the capture
-    # cap.release()
+    cap.release()
     # and destroy created windows, so that they are not left for the rest of the program
     cv2.destroyAllWindows()
 
