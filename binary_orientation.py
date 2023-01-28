@@ -66,6 +66,7 @@ def binary_orientation(frame, orientation, kernel, thresh):
     erosion = cv2.erode(opening, kernel_erosion, iterations=1)
     # cv2.imshow("erosion_mask", erosion)
     binary_value = np.zeros(kernel ** 2)
+    # binary_value = "".zfill(kernel ** 2) UŻYJ TEGO
     coord_numbers = []
     contours, _ = cv2.findContours(erosion, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     for count, contour in enumerate(contours):
@@ -73,6 +74,7 @@ def binary_orientation(frame, orientation, kernel, thresh):
         # cv2.drawContours(image, contours, count, (0, 0, 255), 2)
         # cv2.imshow("image", image)
         # cv2.waitKey()
+        # Uwzględnić pole
 
         x, y, w, h = cv2.boundingRect(contour)
         coord_numbers.append((x + w // 2, y + h // 2))
