@@ -4,7 +4,7 @@ import pickle
 import socket
 import time
 from math import dist
-
+from binary_orientation import binary_orientation
 import cv2
 import numpy as np
 from scipy.spatial.distance import cdist
@@ -60,7 +60,7 @@ def calculate_side(image, kernel):
 
         binary_result = otsu_mask - line_image
         binary_result = cv2.erode(binary_result, (7, 7), iterations=1)
-
+        ret, line_mask = cv2.threshold(line_image, 127, 255, cv2.THRESH_BINARY_INV)
         edge_length = kernel * 3  # DEBUG
 
         contours, hierarchy = cv2.findContours(binary_result, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -79,13 +79,13 @@ def calculate_side(image, kernel):
                 if all(abs(lengths[0] - length) < 2 for length in lengths[1:]) and lengths[0] > 20:
                     # Draw each contour only for visualisation purposes
                     # cv2.drawContours(image, contours, count, (0, 0, 255), 2)
-                    return lengths[0] + edge_length, contour, binary_result
-        return None, None, None
+                    return lengths[0] + edge_length, contour, binary_result, line_mask
+        return None, None, None, None
     else:
-        return None, None, None
+        return None, None, None, None
 
 
-def rotate_table(image, contour_field, binary_image):
+def rotate_table(image, contour_field, binary_image, binary_line):
     # FIRST METHOD
     width, height, _ = image.shape
     cX, cY = (height // 2, width // 2)  # center point of frame
@@ -106,7 +106,6 @@ def rotate_table(image, contour_field, binary_image):
         # Output "lines" is an array containing endpoints of detected line segments
         lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]),
                                 min_line_length, max_line_gap)
-        print(type(lines))
         if lines is not None:
             for line in lines:
                 for x1, y1, x2, y2 in line:
@@ -114,6 +113,7 @@ def rotate_table(image, contour_field, binary_image):
 
             binary_result = otsu_mask - line_image
             binary_result = cv2.erode(binary_result, (7, 7), iterations=1)
+            ret, line_mask = cv2.threshold(line_image, 127, 255, cv2.THRESH_BINARY_INV)
 
             contours, hierarchy = cv2.findContours(binary_result, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
             for count, contour in enumerate(contours):
@@ -135,17 +135,22 @@ def rotate_table(image, contour_field, binary_image):
                         M = cv2.getRotationMatrix2D((cX, cY), angle, 1.0)
                         rotated_binary = cv2.warpAffine(binary_image, M, (height, width))
                         rotated_frame = cv2.warpAffine(image, M, (height, width))
-                        return rotated_binary, rotated_frame
+                        rotated_binary_line = cv2.warpAffine(line_mask, M, (height, width))
+                        return rotated_binary, rotated_frame, rotated_binary_line
     else:
         rect = cv2.minAreaRect(contour_field)
         angle = rect[2]
         M = cv2.getRotationMatrix2D((cX, cY), angle, 1.0)
         rotated_binary = cv2.warpAffine(binary_image, M, (height, width))
         rotated_frame = cv2.warpAffine(image, M, (height, width))
-        return rotated_binary, rotated_frame
+        rotated_binary_line = cv2.warpAffine(binary_line, M, (height, width))
+        return rotated_binary, rotated_frame, rotated_binary_line
+
+# def find_cutout(position):
+#     if position == 0:
 
 
-def cut_out_square(binary_image, side, kernel_size, frame):
+def cut_out_square(binary_image, side, kernel_size, frame, rotated_binary_line):
     # FIRST METHOD
     # height, width = img.shape
     # harris_corners = cv2.cornerHarris(img, 7, 1, 0.21)  # detect corners
@@ -161,20 +166,23 @@ def cut_out_square(binary_image, side, kernel_size, frame):
 
     # SECOND METHOD
     # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    height_binary, width_binary = binary_image.shape
-    center_square_binary = binary_image[height_binary // 2 - int(0.62 * kernel_size * side):height_binary // 2 + int(
-        0.62 * kernel_size * side),
-                           width_binary // 2 - int(0.62 * kernel_size * side):width_binary // 2 + int(
-                               0.62 * kernel_size * side)]
+    # height_binary, width_binary = binary_image.shape
+    # center_square_binary = binary_image[height_binary // 2 - int(0.6 * kernel_size * side):height_binary // 2 + int(
+    #     0.6 * kernel_size * side),
+    #                        width_binary // 2 - int(0.6 * kernel_size * side):width_binary // 2 + int(
+    #                            0.6 * kernel_size * side)]
+    #
+    # height_frame, width_frame, _ = frame.shape
+    # center_square_frame = frame[
+    #                       height_frame // 2 - int(0.6 * kernel_size * side):height_frame // 2 + int(
+    #                           0.6 * kernel_size * side),
+    #                       width_frame // 2 - int(0.6 * kernel_size * side):width_frame // 2 + int(
+    #                           0.6 * kernel_size * side)]
+    #
+    # return center_square_binary, center_square_frame
 
-    height_frame, width_frame, _ = frame.shape
-    center_square_frame = frame[
-                          height_frame // 2 - int(0.62 * kernel_size * side):height_frame // 2 + int(
-                              0.62 * kernel_size * side),
-                          width_frame // 2 - int(0.62 * kernel_size * side):width_frame // 2 + int(
-                              0.62 * kernel_size * side)]
+    # --------------------------------------------------------------------------------------------------
 
-    return center_square_binary, center_square_frame
     # h_center_square, w_center_square = center_square.shape
     #
     # center_square = cv2.GaussianBlur(center_square, (21, 21), 0)
@@ -241,21 +249,59 @@ def cut_out_square(binary_image, side, kernel_size, frame):
     # # cv2.imshow("square_2", square_)  # DEBUG
     # # cv2.imshow("corners", corners)
     # return square_
+    height_binary, width_binary = rotated_binary_line.shape
+    center_square_binary = binary_image[height_binary // 2 - int(0.6 * kernel_size * side):height_binary // 2 + int(
+        0.6 * kernel_size * side),
+                           width_binary // 2 - int(0.6 * kernel_size * side):width_binary // 2 + int(
+                               0.6 * kernel_size * side)]
+    center_square_frame = frame[height_binary // 2 - int(0.6 * kernel_size * side):height_binary // 2 + int(
+        0.6 * kernel_size * side),
+                           width_binary // 2 - int(0.6 * kernel_size * side):width_binary // 2 + int(
+                               0.6 * kernel_size * side)]
+    center_square = rotated_binary_line[height_binary // 2 - int(0.6 * kernel_size * side):height_binary // 2 + int(
+        0.6 * kernel_size * side),
+                           width_binary // 2 - int(0.6 * kernel_size * side):width_binary // 2 + int(
+                               0.6 * kernel_size * side)]
+    side_of_window = center_square.shape[0] // kernel_size
+    kernel_erosion = np.ones((13, 13), np.uint8)
+    center_square = cv2.erode(center_square, kernel_erosion, iterations=1)
+    contours, _ = cv2.findContours(center_square, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    # pomoc = center_square_frame.copy()
+    for count, contour in enumerate(contours):
+        area = cv2.contourArea(contour)
+        if area < (side**2)*0.55:
+            continue
+
+        # cv2.drawContours(pomoc, contours, count, (0, 0, 255), 2)
+        # cv2.imshow("center", pomoc)
+        # cv2.waitKey()
+        x, y, w, h = cv2.boundingRect(contour)
+        center_point_w, center_point_h = (x + w // 2, y + h // 2)
+        for i in range(kernel_size):
+            for j in range(kernel_size):
+                if j * side_of_window < center_point_w < (j + 1) * side_of_window and i * side_of_window < center_point_h < (i + 1) * side_of_window:
+                    h_binary, w_binary = int(side*i), int(side*j)
+                    difference_h = abs(y - h_binary)
+                    difference_w = abs(x - w_binary)
+                    binary_square = center_square_binary[difference_h: difference_h + int(kernel_size * side), difference_w: difference_w + int(kernel_size * side)]
+                    frame_square = center_square_frame[difference_h: difference_h + int(kernel_size * side), difference_w: difference_w + int(kernel_size * side)]
+                    return binary_square, frame_square
+    return None, None
 
 
 def find_mask_of_triangle(hsv_square, thresh):
-    mask1 = cv2.inRange(hsv_square, np.array(thresh[0][0]), np.array(thresh[0][1]))
-    mask2 = cv2.inRange(hsv_square, np.array(thresh[1][0]), np.array(thresh[1][1]))
-    mask3 = cv2.inRange(hsv_square, np.array(thresh[2][0]), np.array(thresh[2][1]))
-    mask = mask1 + mask2 + mask3
-    # kernelOpen = np.ones((5, 5))
-    # maskOpen = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernelOpen)
-    return mask
+    mask = cv2.inRange(hsv_square, np.array(thresh[0][0]), np.array(thresh[0][1]))
+    kernelOpen = np.ones((5, 5))
+    maskOpen = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernelOpen)
+    return maskOpen
 
 
-def find_orientation(triangle):
+def find_orientation(triangle, side):
     contours, _ = cv2.findContours(triangle, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     for contour in contours:
+        area = cv2.contourArea(contour)
+        if area < side/8:
+            continue
         epsilon = 0.15 * cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, epsilon, True)  # Calculate the position of the corners of the contour
         # print(len(np.squeeze(approx)))
@@ -319,33 +365,32 @@ def main(kernel):
             break
 
         if not if_side:
-            side, contour, binary_image = calculate_side(frame, kernel)
+            side, contour, binary_image, binary_line = calculate_side(frame, kernel)
         else:
             contour = None
             binary_image = None
+            binary_line = None
         if side is not None:  # Check if program calculate side of binary field
-            rotated_binary_frame, rotated_frame = rotate_table(frame, contour, binary_image)
+            rotated_binary_frame, rotated_frame, rotated_binary_line = rotate_table(frame, contour, binary_image, binary_line)
 
             if rotated_binary_frame is not None:
-                binary_square, frame_square = cut_out_square(rotated_binary_frame, side, kernel, rotated_frame)
+                binary_square, frame_square = cut_out_square(rotated_binary_frame, side, kernel, rotated_frame, rotated_binary_line)
+                if binary_square is not None:
+                    ret, buffer = cv2.imencode(".jpg", binary_square, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+                    x_as_bytes = pickle.dumps(buffer)
+                    s.sendto(x_as_bytes, (serverip, serverport))
 
-                # ret, buffer = cv2.imencode(".jpg", square, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
-                # x_as_bytes = pickle.dumps(buffer)
-                # s.sendto(x_as_bytes, (serverip, serverport))
+                    hsv_square = cv2.cvtColor(frame_square, cv2.COLOR_BGR2HSV)
+                    triangle = find_mask_of_triangle(hsv_square, thresholds["triangle"])
+                    orientation = find_orientation(triangle, side)
+                    avg_time.append((time.time() - start_time) * 1000)  # DEBUG
+                    process_time += (time.time() - start_time) * 1000  # DEBUG
+                    if orientation is not None:
+                        position_value = binary_orientation(binary_square, orientation, kernel, side)
+                    # if position_value is not None:
+                    #     cv2.imwrite("data/pomoc_" + str(cos) + ".png", position_value)
+                    #     cv2.imwrite("data/frame_" + str(cos) + ".png", frame_square)
 
-                hsv_square = cv2.cvtColor(frame_square, cv2.COLOR_BGR2HSV)
-                triangle = find_mask_of_triangle(hsv_square, thresholds["triangle"])
-                cv2.imwrite("data/frame_" + str(cos) + ".png", frame_square)
-                cv2.imwrite("data/triangle_" + str(cos) + ".png", triangle)
-
-                avg_time.append((time.time() - start_time) * 1000)  # DEBUG
-                process_time += (time.time() - start_time) * 1000  # DEBUG
-        #         # cv2.imshow("triangle", triangle)
-        #         # cv2.waitKey()
-        #         #
-        #         orientation = find_orientation(triangle)
-        #         # print("Current Orientation: ", orientation)
-        #         position_value = binary_orientation(square, orientation, kernel, thresholds["side"])
         #         # print("position value:", position_value)
         #         try:
         #             if pos:
@@ -376,7 +421,7 @@ def main(kernel):
         # Wait a little (5 ms) for a key press - this is required to refresh the image in our window
         key = cv2.waitKey(5)
 
-        if process_time > 5000:
+        if process_time > 10000:
             break
 
     print("average time:", sum(avg_time) / len(avg_time), "miliseconds")

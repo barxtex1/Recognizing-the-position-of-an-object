@@ -54,29 +54,25 @@ def find_where_is_one(coord, number, orientation, shape, kernel):
         return number
 
 
-def binary_orientation(frame, orientation, kernel, thresh):
-    # mask = cv2.inRange(hsv, np.array(thresh[0]), np.array(thresh[1]))
-
-    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    mask = cv2.adaptiveThreshold(gray_frame, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 91, 0)
-    kernel_opening = np.ones((9, 9), np.uint8)
-    opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_opening)
-    # cv2.imshow("opening", opening)
-    kernel_erosion = np.ones((31, 31), np.uint8)
-    erosion = cv2.erode(opening, kernel_erosion, iterations=1)
-    # cv2.imshow("erosion_mask", erosion)
-    binary_value = np.zeros(kernel ** 2)
-    # binary_value = "".zfill(kernel ** 2) UŻYJ TEGO
+def binary_orientation(binary_frame, orientation, kernel, side):
+    kernel_erosion = np.ones((13, 13), np.uint8)
+    erosion = cv2.erode(binary_frame, kernel_erosion, iterations=1)
+    # binary_value = np.zeros(kernel ** 2)
+    binary_value = "".zfill(kernel ** 2)
     coord_numbers = []
     contours, _ = cv2.findContours(erosion, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    pomoc = cv2.cvtColor(erosion, cv2.COLOR_GRAY2BGR)
     for count, contour in enumerate(contours):
+        area = cv2.contourArea(contour)
+        if area < (side**2)/2:
+            continue
         # Draw each contour only for visualisation purposes
-        # cv2.drawContours(image, contours, count, (0, 0, 255), 2)
-        # cv2.imshow("image", image)
+        # cv2.drawContours(pomoc, contours, count, (0, 0, 255), 2)
+        # cv2.imshow("image", pomoc)
         # cv2.waitKey()
         # Uwzględnić pole
 
-        x, y, w, h = cv2.boundingRect(contour)
-        coord_numbers.append((x + w // 2, y + h // 2))
-    binary_value = find_where_is_one(coord_numbers, binary_value, orientation, mask.shape, kernel)
-    return int(sum([j * (2 ** i) for i, j in list(enumerate(reversed(binary_value)))]))  # decimal value of position
+    #     x, y, w, h = cv2.boundingRect(contour)
+    #     coord_numbers.append((x + w // 2, y + h // 2))
+    # binary_value = find_where_is_one(coord_numbers, binary_value, orientation, mask.shape, kernel)
+    return None  # decimal value of position
