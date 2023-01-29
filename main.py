@@ -349,7 +349,7 @@ def main(kernel):
         print("Cannot open camera")
         exit()
 
-    fps_return = cap.set(cv2.CAP_PROP_FPS, 150)  # Set frame rate to 30
+    fps_return = cap.set(cv2.CAP_PROP_FPS, 60)  # Set frame rate to 30
     print("Camera fps status", fps_return)
 
     if_side = False
